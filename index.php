@@ -32,19 +32,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!empty($html)) {
             $emails = extractEmails($html);
             $phones = extractPhones($html);
-            $images = [];
 
+            // Always extract images, regardless of input method
+            $baseUrl = ($_POST['input_method'] === 'url' && !empty($_POST['url']))
+                ? $_POST['url']
+                : 'https://example.com'; // Default base URL for relative paths
+            $images = extractImages($html, $baseUrl);
+
+            // Only download images if we have a valid base URL
             if ($_POST['input_method'] === 'url' && !empty($_POST['url'])) {
-                $images = extractImages($html, $_POST['url']);
                 downloadImages($images);
-
-                // Save image links to file
                 file_put_contents(STORAGE_DIR . '/images/images_links.txt', implode("\n", $images));
             }
         }
         file_put_contents(STORAGE_DIR . '/emails.txt', implode("\n", $emails));
         file_put_contents(STORAGE_DIR . '/phones.txt', implode("\n", $phones));
-        file_put_contents(STORAGE_DIR . '/images/images_links.txt', implode("\n", $images));
+        // file_put_contents(STORAGE_DIR . '/images/images_links.txt', implode("\n", $images));
 
         ob_start(); ?>
         <div id="resultsContainer">
@@ -133,62 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         content="Advanced web scraping tool to extract emails, phone numbers, and images from any website.">
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
-    <!-- <style>
-        .tab-content {
-            padding: 20px 0;
-        }
 
-        .nav-tabs {
-            margin-bottom: 20px;
-        }
-
-        .download-all {
-            margin: 20px 0;
-        }
-
-        .image-preview {
-            max-height: 150px;
-            width: auto;
-        }
-
-        .progress-steps .active {
-            font-weight: bold;
-            color: #0d6efd;
-        }
-
-        .progress-steps .completed {
-            color: #198754;
-        }
-
-        .loader {
-            border: 5px solid #f3f3f3;
-            border-top: 5px solid #3498db;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 2s linear infinite;
-            margin: 20px auto;
-        }
-
-        @keyframes spin {
-            0% {
-                transform: rotate(0deg);
-            }
-
-            100% {
-                transform: rotate(360deg);
-            }
-        }
-
-        .output-block {
-            margin-bottom: 20px;
-        }
-
-        .field-title {
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-    </style> -->
     <style>
         .loader {
             border: 5px solid #f3f3f3;

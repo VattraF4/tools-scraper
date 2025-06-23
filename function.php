@@ -32,7 +32,8 @@ function extractEmails($html)
     return array_values(array_filter($emails, fn($e) => !preg_match('/\.(png|jpg|jpeg|gif|svg|css|js)$/i', $e)));
 }
 
-function extractPhones($html) {
+function extractPhones($html)
+{
     $patterns = [
         '/\+[\d]{1,4}[\s\-]?[\d]{2,4}[\s\-]?[\d]{3,4}[\s\-]?[\d]{3,4}/',
         '/\b(?:800|855|866|877|888)[\s\-.]?\d{3}[\s\-.]?\d{4}\b/',
@@ -45,9 +46,12 @@ function extractPhones($html) {
         preg_match_all($pattern, $html, $matches);
         foreach ($matches[0] as $num) {
             $cleaned = preg_replace('/[^\+\d]/', '', $num);
-            if (str_starts_with($cleaned, '+') && strlen($cleaned) >= 9) $phones[] = $cleaned;
-            elseif (preg_match('/^1?\d{10}$/', $cleaned)) $phones[] = (strlen($cleaned) === 10) ? '1'.$cleaned : $cleaned;
-            elseif (strlen($cleaned) >= 8) $phones[] = $cleaned;
+            if (str_starts_with($cleaned, '+') && strlen($cleaned) >= 9)
+                $phones[] = $cleaned;
+            elseif (preg_match('/^1?\d{10}$/', $cleaned))
+                $phones[] = (strlen($cleaned) === 10) ? '1' . $cleaned : $cleaned;
+            elseif (strlen($cleaned) >= 8)
+                $phones[] = $cleaned;
         }
     }
     return array_values(array_unique($phones));
@@ -58,39 +62,39 @@ function extractPhones($html) {
 //     $patterns = [
 //         // International format (+country code)
 //         '/\+[\d]{1,4}[\s\-]?[\d]{2,5}[\s\-]?[\d]{3,5}[\s\-]?[\d]{3,7}/',
-        
+
 //         // Standard formats with separators
 //         // '/\(?\d{2,5}\)?[\s\-.]?\d{2,5}[\s\-.]?\d{2,5}[\s\-.]?\d{2,5}/',
-        
+
 //         // Toll-free numbers
 //         '/\b(?:800|855|866|877|888|1(?:800|81|82|83|84|85|86|87|88|89))[\s\-.]?\d{3}[\s\-.]?\d{4}\b/',
-        
+
 //         // Common patterns in text
 //         '/(?:phone|tel|telephone|mobile|call)[:\s]*([+\d][\d\s\-().]{7,})/i',
-        
+
 //         // Special Cambodia patterns (enhanced)
 //         '/\(\+855\)?\s?\d{2,3}[-\s]?\d{3}[-\s]?\d{3}/',  // (+855)12-345-678
 //         '/0\d{2,3}[-\s]?\d{3}[-\s]?\d{3}/',             // 012-345-678
 //         '/\d{8,9}(?![0-9])/'                             // 12345678 or 123456789
 //     ];
-    
+
 //     $phones = [];
 //     $cambodiaPrefixes = [
 //         '10', '11', '12', '14', '15', '16', '17', '18', '19', // Mobitel
 //         '23', '24', '25', '26', '27', '28', '29', '41', '42', // Cellcard
 //         '31', '32', '33', '34', '35', '36', '37', '38', '39', '60', '66', '67', '68', '69', '71', '76', '77', '78', '79', '85', '89', '90', '92', '95', '99' // Smart
 //     ];
-    
+
 //     foreach ($patterns as $pattern) {
 //         preg_match_all($pattern, $html, $matches);
 //         foreach ($matches[0] as $num) {
 //             $cleaned = preg_replace('/[^\+\d]/', '', $num);
-            
+
 //             // Special handling for Cambodia numbers
 //             if (str_starts_with($cleaned, '+855')) {
 //                 $localNum = substr($cleaned, 4);
 //                 $prefix = substr($localNum, 0, 2);
-                
+
 //                 if (in_array($prefix, $cambodiaPrefixes) && (strlen($localNum) === 8 || strlen($localNum) === 9)) {
 //                     $phones[] = $cleaned;
 //                 }
@@ -119,38 +123,62 @@ function extractPhones($html) {
 //             }
 //         }
 //     }
-    
+
 //     // Remove duplicates and return
 //     return array_values(array_unique($phones));
 
 // }
 function extractImages($html, $baseUrl)
 {
-    $extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
+    $extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'ico'];
     $images = [];
 
-    // Extract from img tags
+    // 1. Extract from img tags
     preg_match_all('/<img[^>]+src\s*=\s*[\'"]([^\'">]+)[\'"]/i', $html, $matches);
     $images = array_merge($images, $matches[1]);
 
-    // Extract from CSS backgrounds
-    preg_match_all('/background(?:-image)?\s*:\s*url\([\'"]?([^"\')]+)[\'"]?\)/i', $html, $matches);
-    $images = array_merge($images, $matches[1]);
+    // 2. Extract from CSS backgrounds
+    preg_match_all('/background(?:-image)?\s*:\s*(?:url\([\'"]?([^"\')]+)[\'"]?\)|(?:["\']?([^"\';]+)["\']?))/i', $html, $matches);
+    $images = array_merge($images, $matches[1], $matches[2]);
+
+    // 3. Extract plain URLs in text (enhanced pattern)
+    $extPattern = implode('|', array_map('preg_quote', $extensions));
+    preg_match_all('/(?:https?:)?\/\/[^\s\'"<>]+\.(?:' . $extPattern . ')(?=[\s\'"<>]|$)/i', $html, $matches);
+    $images = array_merge($images, $matches[0]);
 
     // Process all found images
     $result = [];
     foreach ($images as $src) {
+        if (empty($src))
+            continue;
+
         $src = trim($src, "\"' ");
         if (str_starts_with($src, 'data:'))
             continue;
 
-        $url = filter_var($src, FILTER_VALIDATE_URL) ? $src : resolveUrl($src, $baseUrl);
-        $ext = strtolower(pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION));
+        // Handle protocol-relative URLs (//example.com/image.png)
+        if (str_starts_with($src, '//')) {
+            $src = 'https:' . $src;
+        }
 
-        if (in_array($ext, $extensions))
+        $url = filter_var($src, FILTER_VALIDATE_URL) ? $src : resolveUrl($src, $baseUrl);
+
+        // Normalize URL by removing duplicate slashes except after http:
+        $url = preg_replace('/([^:])\/+/', '$1/', $url);
+
+        $ext = strtolower(pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION));
+        if (in_array($ext, $extensions)) {
             $result[] = $url;
+        }
     }
+
     return array_unique($result);
+}
+function extractUrlsFromText($text) {
+    // Match URLs with common image extensions
+    $pattern = '/(https?:\/\/[^\s\'"<>]+\.(?:jpg|jpeg|png|gif|webp|svg|ico)(?=[\s\'"<>]|$))/i';
+    preg_match_all($pattern, $text, $matches);
+    return array_unique($matches[0]);
 }
 
 function resolveUrl($relative, $base)
